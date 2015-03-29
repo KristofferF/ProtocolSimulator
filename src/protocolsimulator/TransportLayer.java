@@ -33,7 +33,8 @@ public class TransportLayer
     private LayerSimulator mLayerSimulator = null;     
     private String mId;    
     private int mTimerValue, mWindowSize;
-            
+    private int mSequence; 
+    
     /**
      * Constructs a TransportLayer
      * 
@@ -59,8 +60,9 @@ public class TransportLayer
     public void toTransportLayer(String message)
     { 
     	System.out.println("From app layer message: " + message);
-    	Segment segment = new Segment("Kristoffer", 0, 0, "Hello there");
-    	mLayerSimulator.print(segment.toString());
+    	Segment segment = new Segment(mId, mSequence, 0, message);
+    	mSequence++;
+    	mLayerSimulator.print("From app layer" + segment.toString());
     	mLayerSimulator.toNetworkLayer(segment);
     } 
     
@@ -71,8 +73,8 @@ public class TransportLayer
      */
     public void toTransportLayer(Segment segment)
     {
-    	System.out.println("From net layer");
-    	mLayerSimulator.print(segment.toString());
+    	System.out.println("From net layer, message: " + segment.payload);
+    	mLayerSimulator.print("From Net layer" + segment.toString());
     	mLayerSimulator.toApplicationLayer(segment.payload);
     }
     
