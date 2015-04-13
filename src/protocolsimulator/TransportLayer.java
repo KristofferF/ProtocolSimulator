@@ -1,5 +1,9 @@
 package protocolsimulator;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Iterator;
+
 /**
  * Klassen simulerar transportlagret i en applikation
  * 
@@ -25,16 +29,18 @@ package protocolsimulator;
  * ens titta igenom koden i dessa utan huvusaken är att ni förstår hur er klass
  * ska interagera med de andra.
  *
- * @author (name)
- * @version (version) 
+ * @author Kristoffer Freiholtz 8703165996
+ * @version 1.0
  */
 public class TransportLayer
 {       
     private LayerSimulator mLayerSimulator = null;     
     private String mId;    
     private int mTimerValue, mWindowSize;
-    private int mSequence; 
-    private final int mStandardAck = 1;
+    private int mSequence = 0; 
+    private final int mStandardAck = -1;
+    private Deque<Segment> mBuffer = new ArrayDeque<Segment>();
+    private Deque<Segment> mWindow = new ArrayDeque<Segment>();
     
     /**
      * Constructs a TransportLayer
@@ -46,7 +52,6 @@ public class TransportLayer
      */
     public TransportLayer(String id, LayerSimulator layers, int timerValue, int windowSize)
     {
-    	System.out.println("Constructor");
     	mId = id;
     	mLayerSimulator = layers;
     	mTimerValue = timerValue;
@@ -59,13 +64,59 @@ public class TransportLayer
      * @param message Message from the Application Layer
      */
     public void toTransportLayer(String message)
-    { 
-    	mLayerSimulator.print(mId + " received " + message + " from application layer");
+    {
     	Segment segment = new Segment(mId, mSequence, mStandardAck, message);
+    	mBuffer.add(segment);
+    	mLayerSimulator.print(mId + " received " + segment.payload + " from application layer");
     	mSequence++;
-    	mLayerSimulator.print(mId + " sends " + segment + " to network layer");   	
+    	update();  	
+    }
+    
+    
+	/**
+	 * update the transport layer
+	 */
+	private void update() {
+		updateQueue();
+    	updateTimer();    	
+	}
+
+	/**
+	 * Updates the queues mBuffer and mWindow. Fills up mWindow to the choosen window size
+	 */
+	private void updateQueue() {
+		if(mWindow.size() < mWindowSize && !mBuffer.isEmpty()){
+    		Segment segment = mBuffer.remove();
+			mWindow.add(segment);			 
+    		send(segment);
+    		mLayerSimulator.resetTimer();
+    	}
+	} 
+	
+	/**
+	 * Send a segment to the network layer
+	 * 
+	 * @param segment The segment to be sent
+	 */
+	private void send(Segment segment) {  	   	
+    	mLayerSimulator.print(mId + " sends " + segment.toString() + " to network layer");   	
     	mLayerSimulator.toNetworkLayer(segment);
-    } 
+	}
+	
+	/**
+	 * Update and restarts the timer as long as the queues mBuffer and mWindow aren't empty
+	 */
+	private void updateTimer() {
+		if(!mLayerSimulator.isTimerActive()){
+			if(mBuffer.isEmpty() && mWindow.isEmpty()){
+				mLayerSimulator.print("All packages sent and received succesfully!");
+	    	}
+			else{
+				mLayerSimulator.print(mId + " starts timer: " + mTimerValue);
+	    		mLayerSimulator.startTimer(mTimerValue);		
+			}
+		}
+	}
     
     /**
      * Called from the Network Layer when a segment arrives
@@ -73,25 +124,80 @@ public class TransportLayer
      * @param segment Segment that arrives from the Network Layer
      */
     public void toTransportLayer(Segment segment)
-    {
+    {  	    	
     	if(segment.isCorrect()){
-    		mLayerSimulator.print("");
-    		mLayerSimulator.toNetworkLayer(segment);    		
+    		handleCorrectSegment(segment);   			   		    		
     	}
     	else{
-    		mLayerSimulator.print("");
+    		mLayerSimulator.print(mId + " received corrupted package " + segment.toString());  		
     	}
-    	mLayerSimulator.print(mId + " received " + segment.payload + "from network layer");
-    	mLayerSimulator.print("From Net layer" + segment.toString());
-    	mLayerSimulator.toApplicationLayer(segment.payload);
-    	
+    	update();
     }
+
+	/**
+	 * Handle the correct segment sent from the network layer
+	 * 
+	 * @param segment Segment that arrives from the Network Layer to be handled
+	 */
+	private void handleCorrectSegment(Segment segment) {
+		mLayerSimulator.print(mId + " received correct package " + segment.toString());
+		if(segment.payload.startsWith("ACK")){
+			handleAck(segment);
+		}
+		else{	
+			handlePackage(segment);	
+		}
+	}
+
+    
+	/**
+	 * Handle correct received package from the network layer  
+	 * 
+	 * @param segment Segment that arrives from the Network Layer to be handled
+	 */
+	private void handlePackage(Segment segment) {
+		mLayerSimulator.print(mId + " received message " + segment.payload);
+		if(mSequence >= segment.seqNumber){
+			mLayerSimulator.print(mId + " sends ACK " + segment.payload);
+			Segment returnSegment = new Segment(mId, mStandardAck, segment.seqNumber, "ACK " + segment.payload.charAt(0));
+			mLayerSimulator.toNetworkLayer(returnSegment);
+			if(mSequence == segment.seqNumber){ 				
+				mLayerSimulator.print(mId + " sends " + segment.payload + " to application layer");
+				mLayerSimulator.toApplicationLayer(segment.payload); 
+				mSequence++;
+			}	
+		} 			
+		else{
+			mLayerSimulator.print(mId + " throws away package " + segment.payload);
+		}
+	}
+
+	/**
+	 * Handle correct received acknowledgement from the network layer
+	 * 
+	 * @param segment Segment that arrives from the Network Layer to be handled
+	 */
+	private void handleAck(Segment segment) {
+		mLayerSimulator.print(mId + " received ACK " + segment.payload); 
+		Iterator<Segment> i = mWindow.iterator();
+		while(i.hasNext()){
+			Segment ackSegment = i.next();
+			if(segment.seqNumber == ackSegment.ackNumber){
+				i.remove();
+				break;
+			}
+		}
+	}
     
     /**
      * Called by the simulator when the specified time for the timer has passed
      */
     public void timerInterrupt()
     {
-    	System.out.println("timerInterrupt");
+    	mLayerSimulator.print("Timer Interrupt");
+    	for (Segment segment : mWindow){
+    		send(segment);
+    	}
+    	update();
     }
 }
