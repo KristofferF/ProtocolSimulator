@@ -2,7 +2,6 @@ package protocolsimulator;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Iterator;
 
 /**
  * Klassen simulerar transportlagret i en applikation
@@ -39,6 +38,7 @@ public class TransportLayer
     private int mTimerValue, mWindowSize;
     private int mSequence = 0; 
     private final int mStandardAck = -1;
+    private boolean mFinished = false;
     private Deque<Segment> mBuffer = new ArrayDeque<Segment>();
     private Deque<Segment> mWindow = new ArrayDeque<Segment>();
     
@@ -77,8 +77,11 @@ public class TransportLayer
 	 * update the transport layer
 	 */
 	private void update() {
-		updateQueue();
-    	updateTimer();    	
+		if(!mFinished){
+			updateQueue();
+			updateTimer(); 
+		}
+		   	
 	}
 
 	/**
@@ -108,8 +111,9 @@ public class TransportLayer
 	 */
 	private void updateTimer() {
 		if(!mLayerSimulator.isTimerActive()){
-			if(mBuffer.isEmpty() && mWindow.isEmpty()){
+			if(mBuffer.isEmpty() && mWindow.isEmpty() && !mFinished){
 				mLayerSimulator.print("All packages sent and received succesfully!");
+				mFinished = true;
 	    	}
 			else{
 				mLayerSimulator.print(mId + " starts timer: " + mTimerValue);
@@ -180,11 +184,7 @@ public class TransportLayer
 	private void handleAck(Segment segment) {
 		mLayerSimulator.print(mId + " received ACK " + segment.payload); 
 		if(!mWindow.isEmpty()){
-			mLayerSimulator.print("Windows seqnumber: " + mWindow.getFirst().seqNumber + 
-					"\nSegment ackNumber: " + segment.ackNumber +
-					"\nWindows payload: " + mWindow.getFirst().payload);
 			if(mWindow.getFirst().seqNumber == segment.ackNumber){
-				mLayerSimulator.print(mWindow.getFirst().seqNumber + " " + mWindow.getFirst().payload + "removed");
 				mWindow.removeFirst();
 			}
 		}
