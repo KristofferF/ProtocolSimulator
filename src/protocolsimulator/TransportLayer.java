@@ -179,12 +179,13 @@ public class TransportLayer
 	 */
 	private void handleAck(Segment segment) {
 		mLayerSimulator.print(mId + " received ACK " + segment.payload); 
-		Iterator<Segment> i = mWindow.iterator();
-		while(i.hasNext()){
-			Segment ackSegment = i.next();
-			if(segment.seqNumber == ackSegment.ackNumber){
-				i.remove();
-				break;
+		if(!mWindow.isEmpty()){
+			mLayerSimulator.print("Windows seqnumber: " + mWindow.getFirst().seqNumber + 
+					"\nSegment ackNumber: " + segment.ackNumber +
+					"\nWindows payload: " + mWindow.getFirst().payload);
+			if(mWindow.getFirst().seqNumber == segment.ackNumber){
+				mLayerSimulator.print(mWindow.getFirst().seqNumber + " " + mWindow.getFirst().payload + "removed");
+				mWindow.removeFirst();
 			}
 		}
 	}
